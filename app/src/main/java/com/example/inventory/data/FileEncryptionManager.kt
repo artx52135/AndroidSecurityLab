@@ -2,11 +2,13 @@ package com.example.inventory.data
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.util.Base64
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.OutputStreamWriter
+import java.io.File
+import java.io.FileOutputStream
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -28,15 +30,26 @@ class FileEncryptionManager(private val context: Context) {
         SecretKeySpec(paddedKey, "AES")
     }
 
-    suspend fun saveItemToEncryptedFile(item: Item, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+    suspend fun saveItemToEncryptedFile(item: Item): Boolean = withContext(Dispatchers.IO) {
         try {
             val jsonString = gson.toJson(item)
             val encryptedData = encryptData(jsonString.toByteArray(Charsets.UTF_8))
 
-            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                OutputStreamWriter(outputStream).use { writer ->
-                    writer.write(encryptedData)
-                }
+            // Создаем папку Inventory в Documents если её нет
+            val inventoryDir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                "Inventory"
+            )
+            if (!inventoryDir.exists()) {
+                inventoryDir.mkdirs()
+            }
+
+            // Создаем файл с именем товара и временной меткой
+            val fileName = "item_${System.currentTimeMillis()}_${item.name.replace(" ", "_")}.enc"
+            val file = File(inventoryDir, fileName)
+
+            FileOutputStream(file).use { outputStream ->
+                outputStream.write(encryptedData.toByteArray(Charsets.UTF_8))
             }
             true
         } catch (e: Exception) {

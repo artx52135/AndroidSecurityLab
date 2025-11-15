@@ -79,10 +79,7 @@ fun ItemEntryScreen(
         onResult = { uri ->
             uri?.let {
                 coroutineScope.launch {
-                    val success = viewModel.loadItemFromFile(it, context)
-                    if (success) {
-                        // Данные загружены, можно показать сообщение
-                    }
+                    viewModel.loadItemFromFile(it, context)
                 }
             }
         }
@@ -120,7 +117,7 @@ fun ItemEntryScreen(
                 }
             },
             onLoadFromFile = {
-                filePickerLauncher.launch("application/json") // Ищем JSON файлы
+                filePickerLauncher.launch("*/*")
             },
             modifier = Modifier
                 .padding(

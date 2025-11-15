@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -66,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
 import com.example.inventory.data.AppSettingsManager
+import com.example.inventory.data.FileEncryptionManager
 import com.example.inventory.data.Item
 import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
@@ -91,8 +93,11 @@ fun ItemDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsManager = AppSettingsManager(context)
+    val fileEncryptionManager = FileEncryptionManager(context)
 
     var showSharingDisabledDialog by rememberSaveable { mutableStateOf(false) }
+    var showSaveSuccessDialog by rememberSaveable { mutableStateOf(false) }
+    var showSaveErrorDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -104,6 +109,27 @@ fun ItemDetailsScreen(
         },
         floatingActionButton = {
             Row {
+                // Save to file button - используем иконку Archive вместо Save
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            val item = uiState.value.itemDetails.toItem()
+                            val success = fileEncryptionManager.saveItemToEncryptedFile(item)
+                            if (success) {
+                                showSaveSuccessDialog = true
+                            } else {
+                                showSaveErrorDialog = true
+                            }
+                        }
+                    },
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBox,
+                        contentDescription = "Сохранить в файл",
+                    )
+                }
                 // Edit button
                 FloatingActionButton(
                     onClick = { navigateToEditItem(uiState.value.itemDetails.id) },
@@ -162,6 +188,22 @@ fun ItemDetailsScreen(
         if (showSharingDisabledDialog) {
             SharingDisabledDialog(
                 onConfirm = { showSharingDisabledDialog = false },
+                modifier = Modifier.padding(dimensionResource(id = R.dimen.padding_medium))
+            )
+        }
+
+        // Диалог успешного сохранения
+        if (showSaveSuccessDialog) {
+            SaveSuccessDialog(
+                onConfirm = { showSaveSuccessDialog = false },
+                modifier = Modifier.padding(dimensionResource(id = R.dimen.padding_medium))
+            )
+        }
+
+        // Диалог ошибки сохранения
+        if (showSaveErrorDialog) {
+            SaveErrorDialog(
+                onConfirm = { showSaveErrorDialog = false },
                 modifier = Modifier.padding(dimensionResource(id = R.dimen.padding_medium))
             )
         }
@@ -376,6 +418,47 @@ private fun SharingDisabledDialog(
         text = {
             Text("Отправка данных из приложения запрещена в настройках. " +
                     "Чтобы включить отправку, перейдите в настройки приложения.")
+        },
+        modifier = modifier,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("OK")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SaveSuccessDialog(
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AlertDialog(
+        onDismissRequest = onConfirm,
+        title = { Text("Успешно") },
+        text = {
+            Text("Товар успешно сохранен в зашифрованный файл.\n\n" +
+                    "Файл находится в папке Documents/Inventory/")
+        },
+        modifier = modifier,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("OK")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SaveErrorDialog(
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AlertDialog(
+        onDismissRequest = onConfirm,
+        title = { Text("Ошибка") },
+        text = {
+            Text("Не удалось сохранить товар в файл. Проверьте разрешения приложения.")
         },
         modifier = modifier,
         confirmButton = {
