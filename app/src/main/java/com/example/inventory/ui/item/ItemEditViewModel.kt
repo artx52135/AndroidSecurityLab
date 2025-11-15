@@ -47,12 +47,16 @@ class ItemEditViewModel(
 
     private val itemId: Int = checkNotNull(savedStateHandle[ItemEditDestination.itemIdArg])
 
+    private var originalDataSource: com.example.inventory.data.DataSource? = null
+
     init {
         viewModelScope.launch {
-            itemUiState = itemsRepository.getItemStream(itemId)
+            val originalItem = itemsRepository.getItemStream(itemId)
                 .filterNotNull()
                 .first()
-                .toItemUiState(true)
+
+            originalDataSource = originalItem.dataSource
+            itemUiState = originalItem.toItemUiState(true)
         }
     }
 
@@ -62,7 +66,12 @@ class ItemEditViewModel(
     suspend fun updateItem(): Boolean {
         val isValid = validateInputOnSave(itemUiState.itemDetails)
         if (isValid) {
-            itemsRepository.updateItem(itemUiState.itemDetails.toItem())
+            // Сохраняем оригинальный источник данных
+            val updatedItem = itemUiState.itemDetails.toItem().copy(
+                dataSource = originalDataSource ?: com.example.inventory.data.DataSource.MANUAL
+            )
+
+            itemsRepository.updateItem(updatedItem)
             return true
         }
         return false
@@ -74,7 +83,7 @@ class ItemEditViewModel(
     fun updateUiState(itemDetails: ItemDetails) {
         itemUiState = ItemUiState(
             itemDetails = itemDetails,
-            isEntryValid = validateInputOnSave(itemDetails) // Убрали валидацию при изменении
+            isEntryValid = validateInputOnSave(itemDetails)
         )
         // Сбрасываем ошибки при изменении полей
         validationErrors = ValidationErrors()

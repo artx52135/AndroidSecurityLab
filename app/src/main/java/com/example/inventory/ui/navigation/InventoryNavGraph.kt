@@ -1,3 +1,4 @@
+// InventoryNavGraph.kt - ДОБАВИТЬ навигацию на Settings:
 /*
  * Copyright (C) 2023 The Android Open Source Project
  *
@@ -31,10 +32,14 @@ import com.example.inventory.ui.item.ItemEditDestination
 import com.example.inventory.ui.item.ItemEditScreen
 import com.example.inventory.ui.item.ItemEntryDestination
 import com.example.inventory.ui.item.ItemEntryScreen
+import com.example.inventory.ui.settings.SettingsDestination
+import com.example.inventory.ui.settings.SettingsScreen
 
 /**
  * Provides Navigation graph for the application.
  */
+// InventoryNavGraph.kt - ИСПРАВИТЬ вызов HomeScreen:
+
 @Composable
 fun InventoryNavHost(
     navController: NavHostController,
@@ -50,7 +55,8 @@ fun InventoryNavHost(
                 navigateToItemEntry = { navController.navigate(ItemEntryDestination.route) },
                 navigateToItemUpdate = {
                     navController.navigate("${ItemDetailsDestination.route}/${it}")
-                }
+                },
+                navigateToSettings = { navController.navigate(SettingsDestination.route) } // ДОБАВИТЬ эту строку
             )
         }
         composable(route = ItemEntryDestination.route) {
@@ -79,6 +85,11 @@ fun InventoryNavHost(
             ItemEditScreen(
                 navigateBack = { navController.popBackStack() },
                 onNavigateUp = { navController.navigateUp() }
+            )
+        }
+        composable(route = SettingsDestination.route) {
+            SettingsScreen(
+                navigateBack = { navController.popBackStack() }
             )
         }
     }

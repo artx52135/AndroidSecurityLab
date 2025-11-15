@@ -85,4 +85,13 @@ dependencies {
     // Testing
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+
+    // Для работы с JSON
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // Для работы с файлами
+    implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // Для работы с корутинами
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 }

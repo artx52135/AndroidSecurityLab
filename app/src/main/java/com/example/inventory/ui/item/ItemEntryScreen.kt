@@ -16,6 +16,9 @@
 
 package com.example.inventory.ui.item
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import java.util.Currency
@@ -36,8 +39,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -45,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
+import com.example.inventory.data.AppSettingsManager
 import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
 import com.example.inventory.ui.theme.InventoryTheme
@@ -64,6 +70,35 @@ fun ItemEntryScreen(
     viewModel: ItemEntryViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val settingsManager = AppSettingsManager(context)
+
+    // Лаунчер для выбора файла
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let {
+                coroutineScope.launch {
+                    val success = viewModel.loadItemFromFile(it, context)
+                    if (success) {
+                        // Данные загружены, можно показать сообщение
+                    }
+                }
+            }
+        }
+    )
+
+    // Установка количества по умолчанию при инициализации
+    LaunchedEffect(settingsManager.useDefaultQuantity) {
+        if (settingsManager.useDefaultQuantity) {
+            viewModel.updateUiState(
+                viewModel.itemUiState.itemDetails.copy(
+                    quantity = settingsManager.defaultQuantity.toString()
+                )
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
             InventoryTopAppBar(
@@ -82,8 +117,10 @@ fun ItemEntryScreen(
                     if (success) {
                         navigateBack()
                     }
-                    // Если валидация не прошла, остаемся на форме с показанными ошибками
                 }
+            },
+            onLoadFromFile = {
+                filePickerLauncher.launch("application/json") // Ищем JSON файлы
             },
             modifier = Modifier
                 .padding(
@@ -103,6 +140,7 @@ fun ItemEntryBody(
     itemUiState: ItemUiState,
     onItemValueChange: (ItemDetails) -> Unit,
     onSaveClick: () -> Unit,
+    onLoadFromFile: () -> Unit,
     modifier: Modifier = Modifier,
     validationErrors: ValidationErrors
 ) {
@@ -110,15 +148,24 @@ fun ItemEntryBody(
         modifier = modifier.padding(dimensionResource(id = R.dimen.padding_medium)),
         verticalArrangement = Arrangement.spacedBy(dimensionResource(id = R.dimen.padding_large))
     ) {
+        Button(
+            onClick = onLoadFromFile,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Загрузить из зашифрованного файла")
+        }
+
         ItemInputForm(
             itemDetails = itemUiState.itemDetails,
             onValueChange = onItemValueChange,
             modifier = Modifier.fillMaxWidth(),
             validationErrors = validationErrors
         )
+
         Button(
             onClick = onSaveClick,
-            enabled = true, // Всегда активна, валидация при нажатии
+            enabled = true,
             shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -264,7 +311,6 @@ fun ItemInputForm(
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 private fun ItemEntryScreenPreview() {
@@ -277,6 +323,7 @@ private fun ItemEntryScreenPreview() {
             ),
             onItemValueChange = {},
             onSaveClick = {},
+            onLoadFromFile = {},
             validationErrors = ValidationErrors()
         )
     }

@@ -33,11 +33,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -55,7 +58,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
 import com.example.inventory.data.Item
 import com.example.inventory.ui.AppViewModelProvider
@@ -76,6 +78,7 @@ object HomeDestination : NavigationDestination {
 fun HomeScreen(
     navigateToItemEntry: () -> Unit,
     navigateToItemUpdate: (Int) -> Unit,
+    navigateToSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
@@ -85,10 +88,20 @@ fun HomeScreen(
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            InventoryTopAppBar(
-                title = stringResource(HomeDestination.titleRes),
-                canNavigateBack = false,
-                scrollBehavior = scrollBehavior
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(HomeDestination.titleRes)) },
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    // Оставляем пустым, так как canNavigateBack = false
+                },
+                actions = {
+                    IconButton(onClick = navigateToSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Настройки"
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -194,6 +207,15 @@ private fun InventoryItem(
                 text = stringResource(R.string.in_stock, item.quantity),
                 style = MaterialTheme.typography.titleMedium
             )
+            // Добавляем отображение источника данных
+            Text(
+                text = when (item.dataSource) {
+                    com.example.inventory.data.DataSource.MANUAL -> "Ручное заполнение"
+                    com.example.inventory.data.DataSource.FILE -> "Загрузка из файла"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -203,7 +225,9 @@ private fun InventoryItem(
 fun HomeBodyPreview() {
     InventoryTheme {
         HomeBody(listOf(
-            Item(1, "Game", 100.0, 20), Item(2, "Pen", 200.0, 30), Item(3, "TV", 300.0, 50)
+            Item(1, "Game", 100.0, 20),
+            Item(2, "Pen", 200.0, 30),
+            Item(3, "TV", 300.0, 50)
         ), onItemClick = {})
     }
 }
@@ -222,6 +246,18 @@ fun InventoryItemPreview() {
     InventoryTheme {
         InventoryItem(
             Item(1, "Game", 100.0, 20),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun HomeScreenPreview() {
+    InventoryTheme {
+        HomeScreen(
+            navigateToItemEntry = {},
+            navigateToItemUpdate = {},
+            navigateToSettings = {}
         )
     }
 }

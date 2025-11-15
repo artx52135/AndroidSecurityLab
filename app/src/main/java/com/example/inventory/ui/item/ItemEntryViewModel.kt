@@ -16,18 +16,25 @@
 
 package com.example.inventory.ui.item
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.example.inventory.data.Item
-import com.example.inventory.data.ItemsRepository
+import com.example.inventory.data.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.NumberFormat
 
 /**
  * ViewModel to validate and insert items in the Room database.
  */
-class ItemEntryViewModel(private val itemsRepository: ItemsRepository) : ViewModel() {
+class ItemEntryViewModel(
+    private val itemsRepository: ItemsRepository,
+    private val settingsManager: AppSettingsManager? = null,
+    private val fileEncryptionManager: FileEncryptionManager? = null
+) : ViewModel() {
 
     /**
      * Holds current item ui state
@@ -39,13 +46,29 @@ class ItemEntryViewModel(private val itemsRepository: ItemsRepository) : ViewMod
     var validationErrors by mutableStateOf(ValidationErrors())
         private set
 
+    private val _loadState = MutableStateFlow<LoadState>(LoadState.Idle)
+    val loadState = _loadState.asStateFlow()
+
+    init {
+        // Устанавливаем количество по умолчанию если нужно
+        settingsManager?.let { manager ->
+            if (manager.useDefaultQuantity) {
+                updateUiState(
+                    itemUiState.itemDetails.copy(
+                        quantity = manager.defaultQuantity.toString()
+                    )
+                )
+            }
+        }
+    }
+
     /**
      * Updates the [itemUiState] with the value provided in the argument.
      */
     fun updateUiState(itemDetails: ItemDetails) {
         itemUiState = ItemUiState(
             itemDetails = itemDetails,
-            isEntryValid = validateInputOnSave(itemDetails) // Убрали валидацию при изменении
+            isEntryValid = validateInputOnSave(itemDetails)
         )
         // Сбрасываем ошибки при изменении полей
         validationErrors = ValidationErrors()
@@ -61,6 +84,30 @@ class ItemEntryViewModel(private val itemsRepository: ItemsRepository) : ViewMod
             return true
         }
         return false
+    }
+
+    /**
+     * Загружает товар из зашифрованного файла
+     */
+    suspend fun loadItemFromFile(uri: Uri, context: Context): Boolean {
+        _loadState.value = LoadState.Loading
+        return try {
+            val loadedItem = fileEncryptionManager?.loadItemFromEncryptedFile(uri)
+            loadedItem?.let { item ->
+                // Устанавливаем источник данных как FILE
+                val itemWithSource = item.copy(dataSource = DataSource.FILE)
+                updateUiState(itemWithSource.toItemDetails())
+                _loadState.value = LoadState.Success
+                true
+            } ?: run {
+                _loadState.value = LoadState.Error("Не удалось загрузить товар из файла")
+                false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _loadState.value = LoadState.Error("Ошибка при загрузке файла: ${e.message}")
+            false
+        }
     }
 
     /**
@@ -119,7 +166,7 @@ class ItemEntryViewModel(private val itemsRepository: ItemsRepository) : ViewMod
  */
 data class ItemUiState(
     val itemDetails: ItemDetails = ItemDetails(),
-    val isEntryValid: Boolean = true // Всегда true, пока не нажали сохранить
+    val isEntryValid: Boolean = true
 )
 
 data class ItemDetails(
@@ -129,7 +176,8 @@ data class ItemDetails(
     val quantity: String = "",
     val supplierName: String = "",
     val supplierEmail: String = "",
-    val supplierPhone: String = ""
+    val supplierPhone: String = "",
+    val dataSource: DataSource = DataSource.MANUAL
 )
 
 // Класс для хранения ошибок валидации
@@ -140,6 +188,14 @@ data class ValidationErrors(
     var emailError: String? = null,
     var phoneError: String? = null
 )
+
+// Состояние загрузки файла
+sealed class LoadState {
+    object Idle : LoadState()
+    object Loading : LoadState()
+    object Success : LoadState()
+    data class Error(val message: String) : LoadState()
+}
 
 /**
  * Extension function to convert [ItemDetails] to [Item]. If the value of [ItemDetails.price] is
@@ -153,7 +209,8 @@ fun ItemDetails.toItem(): Item = Item(
     quantity = quantity.toIntOrNull() ?: 0,
     supplierName = supplierName,
     supplierEmail = supplierEmail,
-    supplierPhone = supplierPhone
+    supplierPhone = supplierPhone,
+    dataSource = dataSource
 )
 
 fun Item.formatedPrice(): String {
@@ -178,5 +235,6 @@ fun Item.toItemDetails(): ItemDetails = ItemDetails(
     quantity = quantity.toString(),
     supplierName = supplierName,
     supplierEmail = supplierEmail,
-    supplierPhone = supplierPhone
+    supplierPhone = supplierPhone,
+    dataSource = dataSource
 )

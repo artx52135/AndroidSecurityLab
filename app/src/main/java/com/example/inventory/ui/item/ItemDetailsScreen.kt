@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
+import com.example.inventory.data.AppSettingsManager
 import com.example.inventory.data.Item
 import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
@@ -89,6 +90,9 @@ fun ItemDetailsScreen(
     val uiState = viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val settingsManager = AppSettingsManager(context)
+
+    var showSharingDisabledDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -111,11 +115,17 @@ fun ItemDetailsScreen(
                         contentDescription = stringResource(R.string.edit_item_title),
                     )
                 }
-                // Share button
+                // Share button - всегда активна, но проверяет настройки при клике
                 FloatingActionButton(
                     onClick = {
-                        val item = uiState.value.itemDetails.toItem()
-                        shareItem(context, item)
+                        if (settingsManager.disableSharing) {
+                            // Показываем диалог, что шаринг запрещен
+                            showSharingDisabledDialog = true
+                        } else {
+                            // Шаринг разрешен - отправляем данные
+                            val item = uiState.value.itemDetails.toItem()
+                            shareItem(context, item, settingsManager)
+                        }
                     },
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -132,15 +142,13 @@ fun ItemDetailsScreen(
             itemDetailsUiState = uiState.value,
             onSellItem = { viewModel.reduceQuantityByOne() },
             onDelete = {
-                // Note: If the user rotates the screen very fast, the operation may get cancelled
-                // and the item may not be deleted from the Database. This is because when config
-                // change occurs, the Activity will be recreated and the rememberCoroutineScope will
-                // be cancelled - since the scope is bound to composition.
                 coroutineScope.launch {
                     viewModel.deleteItem()
                     navigateBack()
                 }
             },
+            hideSensitiveData = settingsManager.hideSensitiveData,
+            disableSharing = settingsManager.disableSharing,
             modifier = Modifier
                 .padding(
                     start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
@@ -149,6 +157,14 @@ fun ItemDetailsScreen(
                 )
                 .verticalScroll(rememberScrollState())
         )
+
+        // Диалог о запрете шаринга
+        if (showSharingDisabledDialog) {
+            SharingDisabledDialog(
+                onConfirm = { showSharingDisabledDialog = false },
+                modifier = Modifier.padding(dimensionResource(id = R.dimen.padding_medium))
+            )
+        }
     }
 }
 
@@ -157,6 +173,8 @@ private fun ItemDetailsBody(
     itemDetailsUiState: ItemDetailsUiState,
     onSellItem: () -> Unit,
     onDelete: () -> Unit,
+    hideSensitiveData: Boolean = false,
+    disableSharing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -164,9 +182,30 @@ private fun ItemDetailsBody(
         verticalArrangement = Arrangement.spacedBy(dimensionResource(id = R.dimen.padding_medium))
     ) {
         var deleteConfirmationRequired by rememberSaveable { mutableStateOf(false) }
+
+        // Показываем предупреждение, если шаринг запрещен
+        if (disableSharing) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Отправка данных запрещена в настройках приложения",
+                    modifier = Modifier.padding(dimensionResource(id = R.dimen.padding_medium)),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+
         ItemDetails(
-            item = itemDetailsUiState.itemDetails.toItem(), modifier = Modifier.fillMaxWidth()
+            item = itemDetailsUiState.itemDetails.toItem(),
+            hideSensitiveData = hideSensitiveData,
+            modifier = Modifier.fillMaxWidth()
         )
+
         Button(
             onClick = onSellItem,
             modifier = Modifier.fillMaxWidth(),
@@ -175,6 +214,7 @@ private fun ItemDetailsBody(
         ) {
             Text(stringResource(R.string.sell))
         }
+
         OutlinedButton(
             onClick = { deleteConfirmationRequired = true },
             shape = MaterialTheme.shapes.small,
@@ -182,6 +222,7 @@ private fun ItemDetailsBody(
         ) {
             Text(stringResource(R.string.delete))
         }
+
         if (deleteConfirmationRequired) {
             DeleteConfirmationDialog(
                 onDeleteConfirm = {
@@ -197,7 +238,9 @@ private fun ItemDetailsBody(
 
 @Composable
 fun ItemDetails(
-    item: Item, modifier: Modifier = Modifier
+    item: Item,
+    hideSensitiveData: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier, colors = CardDefaults.cardColors(
@@ -216,8 +259,7 @@ fun ItemDetails(
                 itemDetail = item.name,
                 modifier = Modifier.padding(
                     horizontal = dimensionResource(
-                        id = R.dimen
-                            .padding_medium
+                        id = R.dimen.padding_medium
                     )
                 )
             )
@@ -226,8 +268,7 @@ fun ItemDetails(
                 itemDetail = item.quantity.toString(),
                 modifier = Modifier.padding(
                     horizontal = dimensionResource(
-                        id = R.dimen
-                            .padding_medium
+                        id = R.dimen.padding_medium
                     )
                 )
             )
@@ -236,20 +277,33 @@ fun ItemDetails(
                 itemDetail = item.formatedPrice(),
                 modifier = Modifier.padding(
                     horizontal = dimensionResource(
-                        id = R.dimen
-                            .padding_medium
+                        id = R.dimen.padding_medium
                     )
                 )
             )
-            // New supplier fields
+
+            // Источник данных
+            ItemDetailsRow(
+                labelResID = R.string.data_source,
+                itemDetail = when (item.dataSource) {
+                    com.example.inventory.data.DataSource.MANUAL -> "Ручное заполнение"
+                    com.example.inventory.data.DataSource.FILE -> "Загрузка из файла"
+                },
+                modifier = Modifier.padding(
+                    horizontal = dimensionResource(
+                        id = R.dimen.padding_medium
+                    )
+                )
+            )
+
+            // New supplier fields - скрываются если включена настройка
             if (item.supplierName.isNotBlank()) {
                 ItemDetailsRow(
                     labelResID = R.string.supplier_name,
-                    itemDetail = item.supplierName,
+                    itemDetail = if (hideSensitiveData) "***" else item.supplierName,
                     modifier = Modifier.padding(
                         horizontal = dimensionResource(
-                            id = R.dimen
-                                .padding_medium
+                            id = R.dimen.padding_medium
                         )
                     )
                 )
@@ -257,11 +311,10 @@ fun ItemDetails(
             if (item.supplierEmail.isNotBlank()) {
                 ItemDetailsRow(
                     labelResID = R.string.supplier_email,
-                    itemDetail = item.supplierEmail,
+                    itemDetail = if (hideSensitiveData) "***" else item.supplierEmail,
                     modifier = Modifier.padding(
                         horizontal = dimensionResource(
-                            id = R.dimen
-                                .padding_medium
+                            id = R.dimen.padding_medium
                         )
                     )
                 )
@@ -269,17 +322,15 @@ fun ItemDetails(
             if (item.supplierPhone.isNotBlank()) {
                 ItemDetailsRow(
                     labelResID = R.string.supplier_phone,
-                    itemDetail = item.supplierPhone,
+                    itemDetail = if (hideSensitiveData) "***" else item.supplierPhone,
                     modifier = Modifier.padding(
                         horizontal = dimensionResource(
-                            id = R.dimen
-                                .padding_medium
+                            id = R.dimen.padding_medium
                         )
                     )
                 )
             }
         }
-
     }
 }
 
@@ -314,17 +365,55 @@ private fun DeleteConfirmationDialog(
         })
 }
 
-// Share function
-private fun shareItem(context: Context, item: Item) {
-    val shareText = """
-        Информация о товаре:
-        Название: ${item.name}
-        Цена: ${item.formatedPrice()}
-        Количество: ${item.quantity}
-        Поставщик: ${item.supplierName}
-        Email поставщика: ${item.supplierEmail}
-        Телефон поставщика: ${item.supplierPhone}
-    """.trimIndent()
+@Composable
+private fun SharingDisabledDialog(
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AlertDialog(
+        onDismissRequest = onConfirm,
+        title = { Text("Отправка запрещена") },
+        text = {
+            Text("Отправка данных из приложения запрещена в настройках. " +
+                    "Чтобы включить отправку, перейдите в настройки приложения.")
+        },
+        modifier = modifier,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("OK")
+            }
+        }
+    )
+}
+
+// Share function with settings check
+private fun shareItem(context: Context, item: Item, settingsManager: AppSettingsManager) {
+    val shareText = buildString {
+        appendLine("Информация о товаре:")
+        appendLine("Название: ${item.name}")
+        appendLine("Цена: ${item.formatedPrice()}")
+        appendLine("Количество: ${item.quantity}")
+        appendLine("Источник: ${
+            when (item.dataSource) {
+                com.example.inventory.data.DataSource.MANUAL -> "Ручное заполнение"
+                com.example.inventory.data.DataSource.FILE -> "Загрузка из файла"
+            }
+        }")
+
+        if (!settingsManager.hideSensitiveData) {
+            if (item.supplierName.isNotBlank()) {
+                appendLine("Поставщик: ${item.supplierName}")
+            }
+            if (item.supplierEmail.isNotBlank()) {
+                appendLine("Email поставщика: ${item.supplierEmail}")
+            }
+            if (item.supplierPhone.isNotBlank()) {
+                appendLine("Телефон поставщика: ${item.supplierPhone}")
+            }
+        } else {
+            appendLine("Данные поставщика: скрыты")
+        }
+    }
 
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
@@ -340,7 +429,17 @@ private fun shareItem(context: Context, item: Item) {
 fun ItemDetailsScreenPreview() {
     InventoryTheme {
         ItemDetailsBody(ItemDetailsUiState(
-            outOfStock = true, itemDetails = ItemDetails(1, "Pen", "$100", "10")
+            outOfStock = true,
+            itemDetails = ItemDetails(
+                id = 1,
+                name = "Pen",
+                price = "100",
+                quantity = "10",
+                supplierName = "Test Supplier",
+                supplierEmail = "test@example.com",
+                supplierPhone = "+79991234567",
+                dataSource = com.example.inventory.data.DataSource.MANUAL
+            )
         ), onSellItem = {}, onDelete = {})
     }
 }

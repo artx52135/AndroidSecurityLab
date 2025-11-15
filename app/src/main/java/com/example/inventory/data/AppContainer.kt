@@ -23,6 +23,8 @@ import android.content.Context
  */
 interface AppContainer {
     val itemsRepository: ItemsRepository
+    val settingsManager: AppSettingsManager
+    val fileEncryptionManager: FileEncryptionManager
 }
 
 /**
@@ -34,5 +36,19 @@ class AppDataContainer(private val context: Context) : AppContainer {
      */
     override val itemsRepository: ItemsRepository by lazy {
         OfflineItemsRepository(InventoryDatabase.getDatabase(context).itemDao())
+    }
+
+    /**
+     * Implementation for [AppSettingsManager]
+     */
+    override val settingsManager: AppSettingsManager by lazy {
+        AppSettingsManager(context)
+    }
+
+    /**
+     * Implementation for [FileEncryptionManager]
+     */
+    override val fileEncryptionManager: FileEncryptionManager by lazy {
+        FileEncryptionManager(context)
     }
 }

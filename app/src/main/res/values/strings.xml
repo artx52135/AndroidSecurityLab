@@ -40,4 +40,17 @@
     <string name="supplier_name">Поставщик</string>
     <string name="supplier_email">Email поставщика</string>
     <string name="supplier_phone">Телефон поставщика</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="security_settings">Безопасность</string>
+    <string name="item_creation_settings">Создание товаров</string>
+    <string name="hide_sensitive_data">Скрыть чувствительные данные</string>
+    <string name="hide_sensitive_data_desc">Скрывает данные поставщика в окне просмотра</string>
+    <string name="disable_sharing">Запретить отправку данных</string>
+    <string name="disable_sharing_desc">Отключает кнопку \"Поделиться\" в деталях товара</string>
+    <string name="use_default_quantity">Использовать количество по умолчанию</string>
+    <string name="use_default_quantity_desc">Автоматически подставлять количество при создании товара</string>
+    <string name="default_quantity">Количество по умолчанию</string>
+    <string name="data_source">Источник данных</string>
+    <string name="load_from_file">Загрузить из файла</string>
 </resources>
