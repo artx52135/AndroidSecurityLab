@@ -62,7 +62,6 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
@@ -73,6 +72,16 @@ import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
 import com.example.inventory.ui.theme.InventoryTheme
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import com.google.gson.Gson
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import android.util.Base64
+import androidx.compose.ui.unit.dp
 
 object ItemDetailsDestination : NavigationDestination {
     override val route = "item_details"
@@ -93,11 +102,27 @@ fun ItemDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsManager = AppSettingsManager(context)
-    val fileEncryptionManager = FileEncryptionManager(context)
 
     var showSharingDisabledDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveSuccessDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveErrorDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Лаунчер для создания файла
+    val createFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        uri?.let { fileUri ->
+            coroutineScope.launch {
+                val item = uiState.value.itemDetails.toItem()
+                val success = saveItemToFileWithUri(item, fileUri, context)
+                if (success) {
+                    showSaveSuccessDialog = true
+                } else {
+                    showSaveErrorDialog = true
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -109,18 +134,13 @@ fun ItemDetailsScreen(
         },
         floatingActionButton = {
             Row {
-                // Save to file button - используем иконку Archive вместо Save
+                // Save to file button
                 FloatingActionButton(
                     onClick = {
-                        coroutineScope.launch {
-                            val item = uiState.value.itemDetails.toItem()
-                            val success = fileEncryptionManager.saveItemToEncryptedFile(item)
-                            if (success) {
-                                showSaveSuccessDialog = true
-                            } else {
-                                showSaveErrorDialog = true
-                            }
-                        }
+                        // Предлагаем пользователю выбрать место сохранения
+                        val item = uiState.value.itemDetails.toItem()
+                        val fileName = "item_${item.name.replace(" ", "_")}.enc"
+                        createFileLauncher.launch(fileName)
                     },
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.padding(end = 8.dp)
@@ -141,14 +161,12 @@ fun ItemDetailsScreen(
                         contentDescription = stringResource(R.string.edit_item_title),
                     )
                 }
-                // Share button - всегда активна, но проверяет настройки при клике
+                // Share button
                 FloatingActionButton(
                     onClick = {
                         if (settingsManager.disableSharing) {
-                            // Показываем диалог, что шаринг запрещен
                             showSharingDisabledDialog = true
                         } else {
-                            // Шаринг разрешен - отправляем данные
                             val item = uiState.value.itemDetails.toItem()
                             shareItem(context, item, settingsManager)
                         }
@@ -184,7 +202,6 @@ fun ItemDetailsScreen(
                 .verticalScroll(rememberScrollState())
         )
 
-        // Диалог о запрете шаринга
         if (showSharingDisabledDialog) {
             SharingDisabledDialog(
                 onConfirm = { showSharingDisabledDialog = false },
@@ -192,7 +209,6 @@ fun ItemDetailsScreen(
             )
         }
 
-        // Диалог успешного сохранения
         if (showSaveSuccessDialog) {
             SaveSuccessDialog(
                 onConfirm = { showSaveSuccessDialog = false },
@@ -200,7 +216,6 @@ fun ItemDetailsScreen(
             )
         }
 
-        // Диалог ошибки сохранения
         if (showSaveErrorDialog) {
             SaveErrorDialog(
                 onConfirm = { showSaveErrorDialog = false },
@@ -208,6 +223,50 @@ fun ItemDetailsScreen(
             )
         }
     }
+}
+
+// Функция для сохранения с использованием URI
+private suspend fun saveItemToFileWithUri(
+    item: Item,
+    uri: Uri,
+    context: Context
+): Boolean {
+    return try {
+        val gson = Gson()
+        val jsonString = gson.toJson(item)
+        val encryptedData = encryptData(jsonString.toByteArray(Charsets.UTF_8))
+
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(encryptedData.toByteArray(Charsets.UTF_8))
+        }
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
+// Функции шифрования (дублируем из FileEncryptionManager для простоты)
+private fun encryptData(data: ByteArray): String {
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    val iv = ByteArray(12) // 96-bit IV для GCM
+    SecureRandom().nextBytes(iv)
+
+    // Для демонстрации используем фиксированный ключ
+    val keyBytes = "MySuperSecretKeyForDemo123".toByteArray(Charsets.UTF_8)
+    val paddedKey = ByteArray(32)
+    System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.size.coerceAtMost(32))
+    val secretKey = SecretKeySpec(paddedKey, "AES")
+
+    val spec = GCMParameterSpec(128, iv)
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
+
+    val encrypted = cipher.doFinal(data)
+    val result = ByteArray(iv.size + encrypted.size)
+    System.arraycopy(iv, 0, result, 0, iv.size)
+    System.arraycopy(encrypted, 0, result, iv.size, encrypted.size)
+
+    return Base64.encodeToString(result, Base64.DEFAULT)
 }
 
 @Composable
@@ -438,7 +497,7 @@ private fun SaveSuccessDialog(
         title = { Text("Успешно") },
         text = {
             Text("Товар успешно сохранен в зашифрованный файл.\n\n" +
-                    "Файл находится в папке Documents/Inventory/")
+                    "Файл сохранен в выбранной вами папке.")
         },
         modifier = modifier,
         confirmButton = {
@@ -458,7 +517,7 @@ private fun SaveErrorDialog(
         onDismissRequest = onConfirm,
         title = { Text("Ошибка") },
         text = {
-            Text("Не удалось сохранить товар в файл. Проверьте разрешения приложения.")
+            Text("Не удалось сохранить товар в файл.")
         },
         modifier = modifier,
         confirmButton = {
