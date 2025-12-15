@@ -18,18 +18,16 @@ package com.example.inventory.ui.item
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -49,6 +47,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,11 +61,12 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
-import com.example.inventory.data.AppSettingsManager
-import com.example.inventory.data.FileEncryptionManager
+import com.example.inventory.data.SharedData
+import com.example.inventory.data.Preferences
 import com.example.inventory.data.Item
 import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
@@ -74,14 +74,13 @@ import com.example.inventory.ui.theme.InventoryTheme
 import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.net.Uri
 import com.google.gson.Gson
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import android.util.Base64
-import androidx.compose.ui.unit.dp
+import com.example.inventory.data.ShareData
 
 object ItemDetailsDestination : NavigationDestination {
     override val route = "item_details"
@@ -101,11 +100,16 @@ fun ItemDetailsScreen(
     val uiState = viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val settingsManager = AppSettingsManager(context)
 
     var showSharingDisabledDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveSuccessDialog by rememberSaveable { mutableStateOf(false) }
     var showSaveErrorDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Получаем настройки из SharedData
+    val hideSensitiveData = SharedData.preferences?.sharedPreferences
+        ?.getBoolean(Preferences.HIDE_IMPORTANT_DATA, false)
+    val disableSharing = SharedData.preferences?.sharedPreferences
+        ?.getBoolean(Preferences.PROHIBIT_SENDING_DATA, false)
 
     // Лаунчер для создания файла
     val createFileLauncher = rememberLauncherForActivityResult(
@@ -121,6 +125,21 @@ fun ItemDetailsScreen(
                     showSaveErrorDialog = true
                 }
             }
+        }
+    }
+
+    // Отслеживаем состояние для отправки данных через SharedData
+    val shareState = SharedData.dataToShare.collectAsState()
+
+    LaunchedEffect(shareState.value.text) {
+        if (shareState.value.text.isNotBlank()) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, shareState.value.text)
+            }
+            context.startActivity(Intent.createChooser(intent, "Поделиться"))
+            // Сбрасываем состояние после отправки
+            SharedData.dataToShare.value = ShareData()
         }
     }
 
@@ -164,11 +183,13 @@ fun ItemDetailsScreen(
                 // Share button
                 FloatingActionButton(
                     onClick = {
-                        if (settingsManager.disableSharing) {
+                        if (disableSharing == true) {
                             showSharingDisabledDialog = true
                         } else {
                             val item = uiState.value.itemDetails.toItem()
-                            shareItem(context, item, settingsManager)
+                            if (hideSensitiveData != null) {
+                                shareItem(item, hideSensitiveData)
+                            }
                         }
                     },
                     shape = MaterialTheme.shapes.medium
@@ -182,25 +203,29 @@ fun ItemDetailsScreen(
         },
         modifier = modifier,
     ) { innerPadding ->
-        ItemDetailsBody(
-            itemDetailsUiState = uiState.value,
-            onSellItem = { viewModel.reduceQuantityByOne() },
-            onDelete = {
-                coroutineScope.launch {
-                    viewModel.deleteItem()
-                    navigateBack()
-                }
-            },
-            hideSensitiveData = settingsManager.hideSensitiveData,
-            disableSharing = settingsManager.disableSharing,
-            modifier = Modifier
-                .padding(
-                    start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
-                    top = innerPadding.calculateTopPadding(),
-                    end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+        if (hideSensitiveData != null) {
+            if (disableSharing != null) {
+                ItemDetailsBody(
+                    itemDetailsUiState = uiState.value,
+                    onSellItem = { viewModel.reduceQuantityByOne() },
+                    onDelete = {
+                        coroutineScope.launch {
+                            viewModel.deleteItem()
+                            navigateBack()
+                        }
+                    },
+                    hideSensitiveData = hideSensitiveData,
+                    disableSharing = disableSharing,
+                    modifier = Modifier
+                        .padding(
+                            start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+                            top = innerPadding.calculateTopPadding(),
+                            end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+                        )
+                        .verticalScroll(rememberScrollState())
                 )
-                .verticalScroll(rememberScrollState())
-        )
+            }
+        }
 
         if (showSharingDisabledDialog) {
             SharingDisabledDialog(
@@ -529,7 +554,7 @@ private fun SaveErrorDialog(
 }
 
 // Share function with settings check
-private fun shareItem(context: Context, item: Item, settingsManager: AppSettingsManager) {
+private fun shareItem(item: Item, hideSensitiveData: Boolean) {
     val shareText = buildString {
         appendLine("Информация о товаре:")
         appendLine("Название: ${item.name}")
@@ -542,7 +567,7 @@ private fun shareItem(context: Context, item: Item, settingsManager: AppSettings
             }
         }")
 
-        if (!settingsManager.hideSensitiveData) {
+        if (!hideSensitiveData) {
             if (item.supplierName.isNotBlank()) {
                 appendLine("Поставщик: ${item.supplierName}")
             }
@@ -557,13 +582,8 @@ private fun shareItem(context: Context, item: Item, settingsManager: AppSettings
         }
     }
 
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "Информация о товаре: ${item.name}")
-        putExtra(Intent.EXTRA_TEXT, shareText)
-    }
-
-    context.startActivity(Intent.createChooser(intent, "Поделиться информацией о товаре"))
+    // Используем SharedData для передачи данных
+    SharedData.dataToShare.value = ShareData(shareText)
 }
 
 @Preview(showBackground = true)

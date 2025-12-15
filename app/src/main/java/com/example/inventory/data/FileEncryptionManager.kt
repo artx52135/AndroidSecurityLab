@@ -8,7 +8,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import androidx.annotation.RequiresApi
-import androidx.core.net.toUri
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,58 +32,6 @@ class FileEncryptionManager(private val context: Context) {
         val paddedKey = ByteArray(32) // 256-bit key
         System.arraycopy(keyBytes, 0, paddedKey, 0, keyBytes.size.coerceAtMost(32))
         SecretKeySpec(paddedKey, "AES")
-    }
-
-    @RequiresApi(Build.VERSION_CODES.Q)
-    suspend fun saveItemToEncryptedFile(item: Item): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val jsonString = gson.toJson(item)
-            val encryptedData = encryptData(jsonString.toByteArray(Charsets.UTF_8))
-
-            // Создаем имя файла
-            val fileName = "item_${System.currentTimeMillis()}_${item.name.replace(" ", "_")}.enc"
-
-            // Используем MediaStore для сохранения в Downloads папку
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Inventory")
-            }
-
-            val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-
-            uri?.let { fileUri ->
-                resolver.openOutputStream(fileUri)?.use { outputStream ->
-                    outputStream.write(encryptedData.toByteArray(Charsets.UTF_8))
-                    return@withContext true
-                }
-            }
-
-            false
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
-
-    suspend fun saveItemToEncryptedFileInCache(item: Item): Uri? = withContext(Dispatchers.IO) {
-        try {
-            val jsonString = gson.toJson(item)
-            val encryptedData = encryptData(jsonString.toByteArray(Charsets.UTF_8))
-
-            // Сохраняем во внутреннее хранилище приложения
-            val fileName = "item_${System.currentTimeMillis()}_${item.name.replace(" ", "_")}.enc"
-            val file = File(context.cacheDir, fileName)
-
-            file.writeText(encryptedData)
-
-            // Возвращаем URI файла
-            file.toUri()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
     }
 
     suspend fun loadItemFromEncryptedFile(uri: Uri): Item? = withContext(Dispatchers.IO) {

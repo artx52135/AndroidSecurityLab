@@ -94,4 +94,8 @@ dependencies {
 
     // Для работы с корутинами
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    implementation("androidx.security:security-crypto:1.0.0")
+
+    //Crypto
+    implementation ("androidx.security:security-crypto:1.1.0-alpha03")
 }

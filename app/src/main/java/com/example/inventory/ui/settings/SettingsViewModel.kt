@@ -1,18 +1,15 @@
 package com.example.inventory.ui.settings
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.example.inventory.data.AppSettingsManager
+import com.example.inventory.data.SharedData
+import com.example.inventory.data.Preferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import androidx.core.content.edit
 
-class SettingsViewModel(
-    private val settingsManager: AppSettingsManager
-) : ViewModel() {
+class SettingsViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -22,34 +19,45 @@ class SettingsViewModel(
     }
 
     private fun loadSettings() {
-        _uiState.update {
-            it.copy(
-                hideSensitiveData = settingsManager.hideSensitiveData,
-                disableSharing = settingsManager.disableSharing,
-                useDefaultQuantity = settingsManager.useDefaultQuantity,
-                defaultQuantity = settingsManager.defaultQuantity.toString()
-            )
+        val prefs = SharedData.preferences?.sharedPreferences
+        if (prefs != null) {
+            _uiState.update {
+                it.copy(
+                    hideSensitiveData = prefs.getBoolean(Preferences.HIDE_IMPORTANT_DATA, false),
+                    disableSharing = prefs.getBoolean(Preferences.PROHIBIT_SENDING_DATA, false),
+                    useDefaultQuantity = prefs.getBoolean(Preferences.USE_DEFAULT_ITEMS_QUANTITY, false),
+                    defaultQuantity = prefs.getInt(Preferences.DEFAULT_ITEMS_QUANTITY, 1).toString()
+                )
+            }
         }
     }
 
     fun updateHideSensitiveData(hide: Boolean) {
-        settingsManager.hideSensitiveData = hide
+        SharedData.preferences?.sharedPreferences?.edit {
+            putBoolean(Preferences.HIDE_IMPORTANT_DATA, hide)
+        }
         _uiState.update { it.copy(hideSensitiveData = hide) }
     }
 
     fun updateDisableSharing(disable: Boolean) {
-        settingsManager.disableSharing = disable
+        SharedData.preferences?.sharedPreferences?.edit {
+            putBoolean(Preferences.PROHIBIT_SENDING_DATA, disable)
+        }
         _uiState.update { it.copy(disableSharing = disable) }
     }
 
     fun updateUseDefaultQuantity(use: Boolean) {
-        settingsManager.useDefaultQuantity = use
+        SharedData.preferences?.sharedPreferences?.edit {
+            putBoolean(Preferences.USE_DEFAULT_ITEMS_QUANTITY, use)
+        }
         _uiState.update { it.copy(useDefaultQuantity = use) }
     }
 
     fun updateDefaultQuantity(quantity: String) {
         val quantityInt = quantity.toIntOrNull() ?: 1
-        settingsManager.defaultQuantity = quantityInt
+        SharedData.preferences?.sharedPreferences?.edit {
+            putInt(Preferences.DEFAULT_ITEMS_QUANTITY, quantityInt)
+        }
         _uiState.update { it.copy(defaultQuantity = quantity) }
     }
 }

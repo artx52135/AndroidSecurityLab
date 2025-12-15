@@ -22,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.example.inventory.data.SharedData
+import com.example.inventory.data.Preferences
 import com.example.inventory.data.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +34,6 @@ import java.text.NumberFormat
  */
 class ItemEntryViewModel(
     private val itemsRepository: ItemsRepository,
-    private val settingsManager: AppSettingsManager? = null,
     private val fileEncryptionManager: FileEncryptionManager? = null
 ) : ViewModel() {
 
@@ -49,16 +50,24 @@ class ItemEntryViewModel(
     private val _loadState = MutableStateFlow<LoadState>(LoadState.Idle)
     val loadState = _loadState.asStateFlow()
 
+    // Добавляем флаг для навигации
+    private val _navigateToHome = MutableStateFlow(false)
+    val navigateToHome = _navigateToHome.asStateFlow()
+
     init {
         // Устанавливаем количество по умолчанию если нужно
-        settingsManager?.let { manager ->
-            if (manager.useDefaultQuantity) {
-                updateUiState(
-                    itemUiState.itemDetails.copy(
-                        quantity = manager.defaultQuantity.toString()
-                    )
+        val useDefaultQuantity = SharedData.preferences?.sharedPreferences
+            ?.getBoolean(Preferences.USE_DEFAULT_ITEMS_QUANTITY, false)
+
+        if (useDefaultQuantity == true) {
+            val defaultQuantity = SharedData.preferences?.sharedPreferences
+                ?.getInt(Preferences.DEFAULT_ITEMS_QUANTITY, 1)
+
+            updateUiState(
+                itemUiState.itemDetails.copy(
+                    quantity = defaultQuantity.toString()
                 )
-            }
+            )
         }
     }
 
@@ -94,10 +103,17 @@ class ItemEntryViewModel(
         return try {
             val loadedItem = fileEncryptionManager?.loadItemFromEncryptedFile(uri)
             loadedItem?.let { item ->
-                // Устанавливаем источник данных как FILE
-                val itemWithSource = item.copy(dataSource = DataSource.FILE)
-                updateUiState(itemWithSource.toItemDetails())
+                // Устанавливаем источник данных как FILE и сбрасываем ID
+                val itemWithSource = item.copy(
+                    id = 0, // ← СБРАСЫВАЕМ ID ДЛЯ СОЗДАНИЯ НОВОЙ ЗАПИСИ
+                    dataSource = DataSource.FILE
+                )
+
+                // Сохраняем товар в базу данных
+                itemsRepository.insertItem(itemWithSource)
+
                 _loadState.value = LoadState.Success
+                _navigateToHome.value = true // Триггер навигации
                 true
             } ?: run {
                 _loadState.value = LoadState.Error("Не удалось загрузить товар из файла")
@@ -108,6 +124,13 @@ class ItemEntryViewModel(
             _loadState.value = LoadState.Error("Ошибка при загрузке файла: ${e.message}")
             false
         }
+    }
+
+    /**
+     * Сброс флага навигации
+     */
+    fun resetNavigation() {
+        _navigateToHome.value = false
     }
 
     /**

@@ -7,34 +7,41 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.inventory.InventoryApplication
+import com.example.inventory.data.AppContainer
 import com.example.inventory.ui.home.HomeViewModel
 import com.example.inventory.ui.item.ItemDetailsViewModel
 import com.example.inventory.ui.item.ItemEditViewModel
 import com.example.inventory.ui.item.ItemEntryViewModel
 import com.example.inventory.ui.settings.SettingsViewModel
+import kotlinx.coroutines.channels.Channel
 
+
+/**
+ * Provides Factory to create instance of ViewModel for the entire Inventory app
+ */
 object AppViewModelProvider {
     val Factory = viewModelFactory {
         // Initializer for ItemEntryViewModel
         initializer {
-            val application = this[APPLICATION_KEY] as InventoryApplication
+            val application = (this[APPLICATION_KEY] as InventoryApplication)
+            val container = application.container
             ItemEntryViewModel(
-                itemsRepository = application.container.itemsRepository,
-                settingsManager = application.container.settingsManager,
-                fileEncryptionManager = application.container.fileEncryptionManager
+                itemsRepository = container.itemsRepository,
+                fileEncryptionManager = container.fileEncryptionManager
             )
         }
         // Initializer for ItemEditViewModel
         initializer {
-            val application = this[APPLICATION_KEY] as InventoryApplication
+            val application = (this[APPLICATION_KEY] as InventoryApplication)
+            val container = application.container
             ItemEditViewModel(
                 this.createSavedStateHandle(),
-                application.container.itemsRepository
+                container.itemsRepository
             )
         }
         // Initializer for ItemDetailsViewModel
         initializer {
-            val application = this[APPLICATION_KEY] as InventoryApplication
+            val application = (this[APPLICATION_KEY] as InventoryApplication)
             ItemDetailsViewModel(
                 this.createSavedStateHandle(),
                 application.container.itemsRepository
@@ -42,13 +49,21 @@ object AppViewModelProvider {
         }
         // Initializer for HomeViewModel
         initializer {
-            val application = this[APPLICATION_KEY] as InventoryApplication
+            val application = (this[APPLICATION_KEY] as InventoryApplication)
             HomeViewModel(application.container.itemsRepository)
         }
         // Initializer for SettingsViewModel
         initializer {
-            val application = this[APPLICATION_KEY] as InventoryApplication
-            SettingsViewModel(application.container.settingsManager)
+            SettingsViewModel()
         }
     }
 }
+
+///**
+// * Extension function to queries for [Application] object and returns an instance of
+// * [InventoryApplication].
+// */
+//fun Channel.Factory.createInventoryApplication(): InventoryApplication {
+//    val application = (this[APPLICATION_KEY] as InventoryApplication)
+//    return application
+//}

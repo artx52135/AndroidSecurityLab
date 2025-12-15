@@ -16,7 +16,6 @@
 
 package com.example.inventory.ui.item
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,6 +39,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,7 +51,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.inventory.InventoryTopAppBar
 import com.example.inventory.R
-import com.example.inventory.data.AppSettingsManager
+import com.example.inventory.data.SharedData
+import com.example.inventory.data.Preferences
 import com.example.inventory.ui.AppViewModelProvider
 import com.example.inventory.ui.navigation.NavigationDestination
 import com.example.inventory.ui.theme.InventoryTheme
@@ -71,7 +73,23 @@ fun ItemEntryScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val settingsManager = AppSettingsManager(context)
+
+    // Получаем настройки из SharedData
+    val useDefaultQuantity = SharedData.preferences?.sharedPreferences
+        ?.getBoolean(Preferences.USE_DEFAULT_ITEMS_QUANTITY, false)
+    val defaultQuantity = SharedData.preferences?.sharedPreferences
+        ?.getInt(Preferences.DEFAULT_ITEMS_QUANTITY, 1)
+
+    // Наблюдаем за состоянием навигации
+    val shouldNavigate by viewModel.navigateToHome.collectAsState()
+
+    // Эффект для навигации
+    LaunchedEffect(shouldNavigate) {
+        if (shouldNavigate) {
+            viewModel.resetNavigation()
+            navigateBack()
+        }
+    }
 
     // Лаунчер для выбора файла
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -86,11 +104,11 @@ fun ItemEntryScreen(
     )
 
     // Установка количества по умолчанию при инициализации
-    LaunchedEffect(settingsManager.useDefaultQuantity) {
-        if (settingsManager.useDefaultQuantity) {
+    LaunchedEffect(useDefaultQuantity) {
+        if (useDefaultQuantity == true) {
             viewModel.updateUiState(
                 viewModel.itemUiState.itemDetails.copy(
-                    quantity = settingsManager.defaultQuantity.toString()
+                    quantity = defaultQuantity.toString()
                 )
             )
         }

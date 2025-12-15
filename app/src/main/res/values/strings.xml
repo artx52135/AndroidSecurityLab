@@ -36,7 +36,6 @@
     <string name="yes">Yes</string>
     <string name="required_fields">*required fields</string>
 
-    <!-- новые строки для поставщика -->
     <string name="supplier_name">Поставщик</string>
     <string name="supplier_email">Email поставщика</string>
     <string name="supplier_phone">Телефон поставщика</string>
